@@ -10,8 +10,16 @@ const INGEST_TOKEN = process.env.HUSHH_INGEST_TOKEN || 'dev-ingest-token';
 const DATA_DIR = process.env.HUSHH_DATA_DIR || path.join(__dirname, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'login-events.json');
 const USERS_FILE = path.join(DATA_DIR, 'login-users.json');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const INDEX_FILE = path.join(__dirname, 'index.html');
+const CONTACT_FILE = path.join(__dirname, 'contact.html');
+const PRIVACY_FILE = path.join(__dirname, 'privacy.html');
+const TERMS_FILE = path.join(__dirname, 'terms.html');
 const MAX_RECENT_LOGINS_PER_USER = 25;
+const DEFAULT_SETTINGS = {
+  contactUrl: 'https://calendly.com/contact-hushhapp/30min',
+  updatedAt: null,
+};
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -30,8 +38,39 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'GET' && (parsedUrl.pathname === '/contact' || parsedUrl.pathname === '/contact.html')) {
+      await sendFile(res, CONTACT_FILE, 'text/html; charset=utf-8');
+      return;
+    }
+
+    if (req.method === 'GET' && (parsedUrl.pathname === '/privacy' || parsedUrl.pathname === '/privacy.html')) {
+      await sendFile(res, PRIVACY_FILE, 'text/html; charset=utf-8');
+      return;
+    }
+
+    if (req.method === 'GET' && (parsedUrl.pathname === '/terms' || parsedUrl.pathname === '/terms.html')) {
+      await sendFile(res, TERMS_FILE, 'text/html; charset=utf-8');
+      return;
+    }
+
     if (req.method === 'GET' && parsedUrl.pathname === '/api/health') {
       sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'GET' && parsedUrl.pathname === '/api/settings') {
+      sendJson(res, 200, await readSettings());
+      return;
+    }
+
+    if (req.method === 'PUT' && parsedUrl.pathname === '/api/settings') {
+      if (!isAdminAuthorized(req, parsedUrl.query)) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return;
+      }
+
+      const payload = await readJsonBody(req);
+      sendJson(res, 200, await writeSettings(payload));
       return;
     }
 
@@ -82,7 +121,7 @@ server.listen(PORT, () => {
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'content-type,x-admin-token,x-hushh-api-key');
 }
 
@@ -128,6 +167,28 @@ async function readUsers() {
 async function writeUsers(users) {
   await fs.mkdir(DATA_DIR, { recursive: true });
   await fs.writeFile(USERS_FILE, JSON.stringify(normalizeUsers(users), null, 2));
+}
+
+async function readSettings() {
+  try {
+    const raw = await fs.readFile(SETTINGS_FILE, 'utf8');
+    return normalizeSettings(JSON.parse(raw));
+  } catch (error) {
+    if (error.code === 'ENOENT') return DEFAULT_SETTINGS;
+    throw error;
+  }
+}
+
+async function writeSettings(payload) {
+  const settings = normalizeSettings({
+    ...await readSettings(),
+    contactUrl: payload.contactUrl,
+    updatedAt: new Date().toISOString(),
+  });
+
+  await fs.mkdir(DATA_DIR, { recursive: true });
+  await fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+  return settings;
 }
 
 function createLoginEvent(payload) {
@@ -264,6 +325,32 @@ function latestDate(left, right) {
 function dateValue(value) {
   const time = Date.parse(value || '');
   return Number.isFinite(time) ? time : 0;
+}
+
+function normalizeSettings(settings) {
+  const contactUrl = normalizeUrl(settings?.contactUrl);
+
+  return {
+    contactUrl: contactUrl || DEFAULT_SETTINGS.contactUrl,
+    updatedAt: safeString(settings?.updatedAt),
+  };
+}
+
+function normalizeUrl(value) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return null;
+
+  try {
+    const parsedUrl = new URL(trimmed);
+    if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
+      throwHttpError(400, 'Contact link must start with http:// or https://');
+    }
+
+    return parsedUrl.toString();
+  } catch (error) {
+    if (error.statusCode) throw error;
+    throwHttpError(400, 'Enter a valid contact link.');
+  }
 }
 
 function safeString(value) {

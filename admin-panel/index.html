@@ -100,9 +100,45 @@
 
       .metrics {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(6, minmax(0, 1fr));
         gap: 12px;
         margin-bottom: 18px;
+      }
+
+      .settings-panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 16px;
+        margin-bottom: 18px;
+      }
+
+      .settings-title {
+        margin: 0 0 12px;
+        color: rgba(255, 255, 255, 0.74);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .settings-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+      }
+
+      .settings-input {
+        min-height: 42px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0 12px;
+        background: #0d0d0d;
+        color: var(--text);
+        outline: none;
+      }
+
+      .settings-input:focus {
+        border-color: rgba(139, 92, 246, 0.65);
       }
 
       .metric {
@@ -134,7 +170,7 @@
       table {
         width: 100%;
         border-collapse: collapse;
-        min-width: 820px;
+        min-width: 1180px;
       }
 
       th,
@@ -248,6 +284,23 @@
         font-size: 13px;
       }
 
+      .details-heading {
+        margin: 18px 0 8px;
+        color: rgba(255, 255, 255, 0.74);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .detail-muted {
+        color: var(--muted);
+      }
+
+      .danger-pill {
+        background: rgba(239, 68, 68, 0.15);
+        color: #fca5a5;
+      }
+
       .status {
         margin: 12px 0 0;
         color: var(--muted);
@@ -280,6 +333,10 @@
           grid-template-columns: 1fr;
         }
 
+        .settings-row {
+          grid-template-columns: 1fr;
+        }
+
         .details-grid,
         .history-item {
           grid-template-columns: 1fr;
@@ -304,7 +361,18 @@
       <section class="metrics">
         <div class="metric"><span>Total logins</span><strong id="total">0</strong></div>
         <div class="metric"><span>Unique emails</span><strong id="unique">0</strong></div>
-        <div class="metric"><span>Latest login</span><strong id="latest">-</strong></div>
+        <div class="metric"><span>Files</span><strong id="filesTotal">0</strong></div>
+        <div class="metric"><span>Credits est.</span><strong id="creditsTotal">0</strong></div>
+        <div class="metric"><span>Failures</span><strong id="failuresTotal">0</strong></div>
+        <div class="metric"><span>Latest active</span><strong id="latest">-</strong></div>
+      </section>
+
+      <section class="settings-panel">
+        <h2 class="settings-title">Contact link</h2>
+        <div class="settings-row">
+          <input id="contactUrl" class="settings-input" type="url" placeholder="https://..." autocomplete="off" />
+          <button id="saveSettings" class="btn" type="button">Save Contact Link</button>
+        </div>
       </section>
 
       <section class="table-wrap">
@@ -312,14 +380,19 @@
           <thead>
             <tr>
               <th>Email</th>
-              <th>Name</th>
+              <th>Signup date</th>
+              <th>Last active</th>
+              <th>Device / OS</th>
+              <th>Country</th>
               <th>Logins</th>
-              <th>Latest login</th>
-              <th>First login</th>
+              <th>Files / Sessions</th>
+              <th>Credits est.</th>
+              <th>Failures</th>
+              <th>Retention</th>
             </tr>
           </thead>
           <tbody id="rows">
-            <tr><td class="empty" colspan="5">Enter the admin token and refresh.</td></tr>
+            <tr><td class="empty" colspan="10">Enter the admin token and refresh.</td></tr>
           </tbody>
         </table>
       </section>
@@ -335,13 +408,20 @@
       const total = document.querySelector('#total');
       const unique = document.querySelector('#unique');
       const latest = document.querySelector('#latest');
+      const filesTotal = document.querySelector('#filesTotal');
+      const creditsTotal = document.querySelector('#creditsTotal');
+      const failuresTotal = document.querySelector('#failuresTotal');
+      const contactUrlInput = document.querySelector('#contactUrl');
+      const saveSettingsButton = document.querySelector('#saveSettings');
 
       let users = [];
+      let serverTotals = null;
       const expandedEmails = new Set();
       tokenInput.value = localStorage.getItem('hushhAdminToken') || '';
 
       refreshButton.addEventListener('click', loadEvents);
       exportButton.addEventListener('click', exportCsv);
+      saveSettingsButton.addEventListener('click', saveSettings);
       rows.addEventListener('click', event => {
         const trigger = event.target.closest('[data-email-toggle]');
         if (!trigger) return;
@@ -358,6 +438,8 @@
       tokenInput.addEventListener('change', () => {
         localStorage.setItem('hushhAdminToken', tokenInput.value.trim());
       });
+
+      loadSettings();
 
       async function loadEvents() {
         const token = tokenInput.value.trim();
@@ -377,6 +459,7 @@
 
           const data = await response.json();
           users = Array.isArray(data.users) ? data.users : groupEvents(data.events || []);
+          serverTotals = data;
           render();
           status.textContent = `Updated ${new Date().toLocaleString()}`;
         } catch (error) {
@@ -384,14 +467,71 @@
         }
       }
 
+      async function loadSettings() {
+        try {
+          const response = await fetch('/api/settings');
+          if (!response.ok) throw new Error('Could not load settings.');
+
+          const settings = await response.json();
+          contactUrlInput.value = settings.contactUrl || '';
+        } catch {
+          contactUrlInput.placeholder = 'Paste contact link after Netlify deploy';
+        }
+      }
+
+      async function saveSettings() {
+        const token = tokenInput.value.trim();
+        const contactUrl = contactUrlInput.value.trim();
+
+        if (!token) {
+          status.textContent = 'Enter the admin token before saving settings.';
+          return;
+        }
+
+        if (!contactUrl) {
+          status.textContent = 'Paste a contact link first.';
+          return;
+        }
+
+        status.textContent = 'Saving contact link...';
+
+        try {
+          const response = await fetch('/api/settings', {
+            method: 'PUT',
+            headers: {
+              'content-type': 'application/json',
+              'x-admin-token': token,
+            },
+            body: JSON.stringify({ contactUrl }),
+          });
+
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data.error || 'Could not save contact link.');
+          }
+
+          contactUrlInput.value = data.contactUrl || contactUrl;
+          status.textContent = `Contact link saved ${new Date().toLocaleString()}`;
+        } catch (error) {
+          status.textContent = error.message || 'Could not save contact link.';
+        }
+      }
+
       function render() {
         const totalLogins = users.reduce((sum, user) => sum + getLoginCount(user), 0);
-        total.textContent = String(totalLogins);
-        unique.textContent = String(users.length);
-        latest.textContent = users[0]?.latestLoginAt ? formatShortDate(users[0].latestLoginAt) : '-';
+        const fileCount = users.reduce((sum, user) => sum + getFileCount(user), 0);
+        const failureCount = users.reduce((sum, user) => sum + getFailureCount(user), 0);
+        const credits = users.reduce((sum, user) => sum + (Number(user.creditsUsed) || 0), 0);
+
+        total.textContent = String(serverTotals?.totalLogins ?? totalLogins);
+        unique.textContent = String(serverTotals?.uniqueEmails ?? users.length);
+        filesTotal.textContent = String(serverTotals?.totalFilesUploaded ?? fileCount);
+        creditsTotal.textContent = formatCredits(serverTotals?.totalCreditsUsed ?? credits);
+        failuresTotal.textContent = String(serverTotals?.totalFailures ?? failureCount);
+        latest.textContent = users[0]?.latestActiveAt ? formatShortDate(users[0].latestActiveAt) : '-';
 
         if (!users.length) {
-          rows.innerHTML = '<tr><td class="empty" colspan="5">No login events yet.</td></tr>';
+          rows.innerHTML = '<tr><td class="empty" colspan="10">No login events yet.</td></tr>';
           return;
         }
 
@@ -411,10 +551,15 @@
                 <span class="chevron">${expanded ? 'v' : '&gt;'}</span>${escapeHtml(email)}
               </button>
             </td>
-            <td>${escapeHtml(user.displayName || '-')}</td>
+            <td>${escapeHtml(formatDate(user.signupAt || user.firstLoginAt))}</td>
+            <td>${escapeHtml(formatDate(user.latestActiveAt || user.latestLoginAt))}</td>
+            <td>${escapeHtml(formatDevice(user.deviceInfo))}</td>
+            <td>${escapeHtml(user.country || user.deviceInfo?.country || '-')}</td>
             <td><span class="pill count-pill">${escapeHtml(getLoginCount(user))}</span></td>
-            <td>${escapeHtml(formatDate(user.latestLoginAt))}</td>
-            <td>${escapeHtml(formatDate(user.firstLoginAt))}</td>
+            <td>${escapeHtml(getFileCount(user))} / ${escapeHtml(user.sessionCount || getFileCount(user))}</td>
+            <td>${escapeHtml(formatCredits(user.creditsUsed))}</td>
+            <td><span class="pill ${getFailureCount(user) ? 'danger-pill' : ''}">${escapeHtml(getFailureCount(user))}</span></td>
+            <td>${escapeHtml(retentionLabel(user))}</td>
           </tr>
           ${expanded ? renderDetailsRow(user) : ''}
         `;
@@ -422,7 +567,11 @@
 
       function renderDetailsRow(user) {
         const recentLogins = Array.isArray(user.recentLogins) ? user.recentLogins : [];
-        const history = recentLogins.length
+        const recentFiles = Array.isArray(user.recentFiles) ? user.recentFiles : [];
+        const recentFailures = Array.isArray(user.recentFailures) ? user.recentFailures : [];
+        const failureDevices = Array.isArray(user.failureDevices) ? user.failureDevices : [];
+
+        const loginHistory = recentLogins.length
           ? recentLogins.map(login => `
               <div class="history-item">
                 <span>Signed in: ${escapeHtml(formatDate(login.signedInAt))}</span>
@@ -431,17 +580,54 @@
               </div>
             `).join('')
           : '<div class="empty">No recent login history saved.</div>';
+        const fileHistory = recentFiles.length
+          ? recentFiles.map(file => `
+              <div class="history-item">
+                <span>${escapeHtml(file.fileType || 'file')} - ${escapeHtml(file.status || 'started')}</span>
+                <span>${escapeHtml(formatDuration(file.durationSeconds))} - ${escapeHtml(formatBytes(file.sizeBytes))}</span>
+                <span class="pill">${escapeHtml(file.outputFormat || '-')}</span>
+              </div>
+            `).join('')
+          : '<div class="empty">No file sessions saved yet.</div>';
+        const failureHistory = recentFailures.length
+          ? recentFailures.map(failure => `
+              <div class="history-item">
+                <span>${escapeHtml(formatDate(failure.failedAt))}</span>
+                <span>${escapeHtml(failure.errorMessage || 'Processing failed')}</span>
+                <span class="pill danger-pill">${escapeHtml(failure.deviceLabel || 'Unknown device')}</span>
+              </div>
+            `).join('')
+          : '<div class="empty">No failures tracked.</div>';
+        const deviceFailures = failureDevices.length
+          ? failureDevices.map(device => `
+              <div class="history-item">
+                <span>${escapeHtml(device.label || 'Unknown device')}</span>
+                <span>${escapeHtml(device.lastError || '-')}</span>
+                <span class="pill danger-pill">${escapeHtml(device.count || 0)}</span>
+              </div>
+            `).join('')
+          : '<div class="empty">No device-wise failures tracked.</div>';
 
         return `
           <tr class="details-row">
-            <td colspan="5">
+            <td colspan="10">
               <div class="details-panel">
                 <div class="details-grid">
                   <div class="detail-stat"><span>Total logins</span><strong>${escapeHtml(getLoginCount(user))}</strong></div>
-                  <div class="detail-stat"><span>Latest received</span><strong>${escapeHtml(formatDate(user.latestReceivedAt))}</strong></div>
-                  <div class="detail-stat"><span>Recent entries kept</span><strong>${escapeHtml(recentLogins.length)}</strong></div>
+                  <div class="detail-stat"><span>Files uploaded</span><strong>${escapeHtml(getFileCount(user))}</strong></div>
+                  <div class="detail-stat"><span>Audio / Video</span><strong>${escapeHtml(user.audioFiles || 0)} / ${escapeHtml(user.videoFiles || 0)}</strong></div>
+                  <div class="detail-stat"><span>Total duration</span><strong>${escapeHtml(formatDuration(user.totalDurationSeconds))}</strong></div>
+                  <div class="detail-stat"><span>Credits estimate</span><strong>${escapeHtml(formatCredits(user.creditsUsed))}</strong></div>
+                  <div class="detail-stat"><span>Device</span><strong>${escapeHtml(formatDevice(user.deviceInfo))}</strong></div>
                 </div>
-                <div class="history-list">${history}</div>
+                <h3 class="details-heading">Recent logins</h3>
+                <div class="history-list">${loginHistory}</div>
+                <h3 class="details-heading">File sessions</h3>
+                <div class="history-list">${fileHistory}</div>
+                <h3 class="details-heading">Failures</h3>
+                <div class="history-list">${failureHistory}</div>
+                <h3 class="details-heading">Device-wise failures</h3>
+                <div class="history-list">${deviceFailures}</div>
               </div>
             </td>
           </tr>
@@ -454,7 +640,19 @@
           return;
         }
 
-        const header = ['email', 'displayName', 'loginCount', 'latestLoginAt', 'firstLoginAt', 'latestReceivedAt'];
+        const header = [
+          'email',
+          'displayName',
+          'signupAt',
+          'latestLoginAt',
+          'latestActiveAt',
+          'country',
+          'loginCount',
+          'filesUploaded',
+          'sessionCount',
+          'creditsUsed',
+          'failedFiles',
+        ];
         const lines = [header.join(',')].concat(
           users.map(user => header.map(key => csvCell(user[key] || '')).join(','))
         );
@@ -508,6 +706,52 @@
 
       function getLoginCount(user) {
         return Number(user.loginCount) || (Array.isArray(user.recentLogins) ? user.recentLogins.length : 0);
+      }
+
+      function getFileCount(user) {
+        return Number(user.filesUploaded) || (Array.isArray(user.recentFiles) ? user.recentFiles.length : 0);
+      }
+
+      function getFailureCount(user) {
+        return Number(user.failedFiles) || (Array.isArray(user.recentFailures) ? user.recentFailures.length : 0);
+      }
+
+      function formatDevice(deviceInfo) {
+        if (!deviceInfo) return '-';
+        return [deviceInfo.platform, deviceInfo.osVersion].filter(Boolean).join(' ') || '-';
+      }
+
+      function formatCredits(value) {
+        const credits = Number(value) || 0;
+        return credits.toFixed(credits % 1 === 0 ? 0 : 2);
+      }
+
+      function formatDuration(value) {
+        const seconds = Math.max(0, Number(value) || 0);
+        if (!seconds) return '-';
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.round(seconds % 60);
+        return mins ? `${mins}m ${secs}s` : `${secs}s`;
+      }
+
+      function formatBytes(value) {
+        const bytes = Number(value) || 0;
+        if (!bytes) return '-';
+        const mb = bytes / (1024 * 1024);
+        if (mb >= 1) return `${mb.toFixed(mb >= 10 ? 0 : 1)} MB`;
+        return `${Math.round(bytes / 1024)} KB`;
+      }
+
+      function retentionLabel(user) {
+        const activeAt = user.latestActiveAt || user.latestLoginAt;
+        const activeTime = Date.parse(activeAt || '');
+        if (!Number.isFinite(activeTime)) return 'No activity';
+
+        const days = Math.floor((Date.now() - activeTime) / 86400000);
+        if (days <= 1) return 'Active today';
+        if (days <= 7) return 'Active this week';
+        if (days <= 30) return 'Active this month';
+        return 'Dormant';
       }
 
       function formatDate(value) {

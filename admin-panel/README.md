@@ -4,7 +4,7 @@ This small Node server receives login events from the app and shows one row per 
 
 ## Netlify Deploy
 
-The Netlify deployment uses `admin-panel/index.html` as the published admin UI and `netlify/functions/login-events.mjs` as the API. `netlify.toml` maps `/api/login-events` to that function.
+The Netlify deployment uses `admin-panel/index.html` as the published admin UI, static public pages in `admin-panel/*.html`, and Netlify functions as the API. `netlify.toml` maps `/api/login-events` and `/api/settings` to those functions.
 
 Set these Netlify environment variables:
 
@@ -31,6 +31,8 @@ npm run admin:start
 Open `http://localhost:4310` and enter the admin token.
 
 The local server stores grouped user login summaries in `admin-panel/data/login-users.json`. If older raw login events exist in `login-events.json`, they are migrated into grouped summaries automatically.
+
+The admin can update the public contact/meeting URL from the admin panel. The mobile app should open `/contact`, and that page loads the latest saved contact URL from `/api/settings`, so future contact-link changes do not require a new APK.
 
 ## App Environment
 
