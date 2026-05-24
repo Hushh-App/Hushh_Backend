@@ -1,0 +1,15 @@
+{
+  "name": "hushh-netlify-admin",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "deploy": "netlify deploy --prod",
+    "dev": "netlify dev"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^10.7.8"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.38.1"
+  }
+}

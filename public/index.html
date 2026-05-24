@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hushh Admin</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #080808;
+        --panel: #141414;
+        --line: rgba(255,255,255,0.12);
+        --text: #ffffff;
+        --muted: rgba(255,255,255,0.58);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Arial, sans-serif;
+      }
+
+      main {
+        width: min(760px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 36px 0;
+      }
+
+      h1 {
+        margin: 0 0 20px;
+        font-size: 26px;
+      }
+
+      .bar {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+
+      input,
+      button {
+        min-height: 42px;
+        border-radius: 8px;
+        font: inherit;
+      }
+
+      input {
+        flex: 1;
+        min-width: 0;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--text);
+        padding: 0 12px;
+      }
+
+      button {
+        border: 0;
+        background: #ffffff;
+        color: #080808;
+        padding: 0 16px;
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+      }
+
+      th,
+      td {
+        padding: 14px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+      }
+
+      th {
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .empty,
+      .status {
+        color: var(--muted);
+      }
+
+      .status {
+        margin-top: 12px;
+        min-height: 20px;
+        font-size: 13px;
+      }
+
+      @media (max-width: 560px) {
+        .bar {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Hushh Login Emails</h1>
+
+      <div class="bar">
+        <input id="token" type="password" placeholder="Admin token" />
+        <button id="refresh" type="button">Refresh</button>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody id="rows">
+          <tr>
+            <td class="empty" colspan="2">Enter admin token and refresh.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div id="status" class="status"></div>
+    </main>
+
+    <script>
+      const token = document.querySelector('#token');
+      const refresh = document.querySelector('#refresh');
+      const rows = document.querySelector('#rows');
+      const status = document.querySelector('#status');
+
+      token.value = localStorage.getItem('hushh_admin_token') || '';
+      refresh.addEventListener('click', loadEmails);
+
+      async function loadEmails() {
+        localStorage.setItem('hushh_admin_token', token.value.trim());
+        status.textContent = 'Loading...';
+
+        try {
+          const response = await fetch('/api/login-events', {
+            headers: { 'x-admin-token': token.value.trim() },
+          });
+
+          if (!response.ok) {
+            throw new Error(response.status === 401 ? 'Wrong admin token.' : 'Could not load data.');
+          }
+
+          const data = await response.json();
+          const events = Array.isArray(data.events) ? data.events : [];
+          render(events);
+          status.textContent = events.length + ' login email(s)';
+        } catch (error) {
+          rows.innerHTML = '<tr><td class="empty" colspan="2">No data loaded.</td></tr>';
+          status.textContent = error.message || 'Could not load data.';
+        }
+      }
+
+      function render(events) {
+        if (!events.length) {
+          rows.innerHTML = '<tr><td class="empty" colspan="2">No login emails yet.</td></tr>';
+          return;
+        }
+
+        rows.innerHTML = events.map(event => `
+          <tr>
+            <td>${escapeHtml(event.email || '')}</td>
+            <td>${escapeHtml(formatDate(event.signedInAt || event.receivedAt))}</td>
+          </tr>
+        `).join('');
+      }
+
+      function formatDate(value) {
+        if (!value) return '-';
+        return new Date(value).toLocaleString();
+      }
+
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, char => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#039;',
+        })[char]);
+      }
+    </script>
+  </body>
+</html>
