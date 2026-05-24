@@ -1,69 +1,119 @@
-import { getStore } from '@netlify/blobs';
+const crypto = require('crypto');
+const fs = require('fs/promises');
+const http = require('http');
+const path = require('path');
+const url = require('url');
 
-const STORE_NAME = 'hushh-login-events';
-const EVENTS_KEY = 'events.json';
-const USERS_KEY = 'users.json';
+const PORT = Number(process.env.PORT || 4310);
+const ADMIN_TOKEN = process.env.HUSHH_ADMIN_TOKEN || 'dev-admin-token';
+const INGEST_TOKEN = process.env.HUSHH_INGEST_TOKEN || 'dev-ingest-token';
+const DATA_DIR = process.env.HUSHH_DATA_DIR || path.join(__dirname, 'data');
+const DATA_FILE = path.join(DATA_DIR, 'login-events.json');
+const USERS_FILE = path.join(DATA_DIR, 'login-users.json');
+const INDEX_FILE = path.join(__dirname, 'index.html');
 const MAX_RECENT_LOGINS_PER_USER = 25;
 
-export default async (request) => {
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders() });
-  }
-
+const server = http.createServer(async (req, res) => {
   try {
-    if (request.method === 'GET') {
-      return handleList(request);
+    setCorsHeaders(res);
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
     }
 
-    if (request.method === 'POST') {
-      return handleCreate(request);
+    const parsedUrl = url.parse(req.url || '/', true);
+
+    if (req.method === 'GET' && parsedUrl.pathname === '/') {
+      await sendFile(res, INDEX_FILE, 'text/html; charset=utf-8');
+      return;
     }
 
-    return json({ error: 'Method not allowed' }, 405);
+    if (req.method === 'GET' && parsedUrl.pathname === '/api/health') {
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'GET' && parsedUrl.pathname === '/api/login-events') {
+      if (!isAdminAuthorized(req, parsedUrl.query)) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return;
+      }
+
+      const users = await readUsers();
+      const totalLogins = users.reduce((total, user) => total + user.loginCount, 0);
+      sendJson(res, 200, {
+        users,
+        totalLogins,
+        uniqueEmails: users.length,
+        latestLoginAt: users[0]?.latestLoginAt || null,
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && parsedUrl.pathname === '/api/login-events') {
+      if (!isIngestAuthorized(req)) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return;
+      }
+
+      const payload = await readJsonBody(req);
+      const event = createLoginEvent(payload);
+      const users = await readUsers();
+      const nextUsers = upsertUserLogin(users, event);
+      await writeUsers(nextUsers);
+      sendJson(res, 201, { ok: true, user: nextUsers.find(user => user.email === event.email) });
+      return;
+    }
+
+    sendJson(res, 404, { error: 'Not found' });
   } catch (error) {
-    return json(
-      { error: error.statusCode ? error.message : 'Internal server error' },
-      error.statusCode || 500
-    );
+    console.error(error);
+    sendJson(res, error.statusCode || 500, {
+      error: error.statusCode ? error.message : 'Internal server error',
+    });
   }
-};
+});
 
-async function handleList(request) {
-  if (!isAdminAuthorized(request)) {
-    return json({ error: 'Unauthorized' }, 401);
-  }
+server.listen(PORT, () => {
+  console.log(`Hushh admin panel running at http://localhost:${PORT}`);
+});
 
-  const users = await readUsers();
-  const totalLogins = users.reduce((total, user) => total + user.loginCount, 0);
-
-  return json({
-    users,
-    totalLogins,
-    uniqueEmails: users.length,
-    latestLoginAt: users[0]?.latestLoginAt || null,
-  });
+function setCorsHeaders(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'content-type,x-admin-token,x-hushh-api-key');
 }
 
-async function handleCreate(request) {
-  if (!isIngestAuthorized(request)) {
-    return json({ error: 'Unauthorized' }, 401);
+function isAdminAuthorized(req, query) {
+  const headerToken = req.headers['x-admin-token'];
+  const queryToken = query.token;
+  return headerToken === ADMIN_TOKEN || queryToken === ADMIN_TOKEN;
+}
+
+function isIngestAuthorized(req) {
+  return req.headers['x-hushh-api-key'] === INGEST_TOKEN;
+}
+
+async function readEvents() {
+  try {
+    const raw = await fs.readFile(DATA_FILE, 'utf8');
+    const events = JSON.parse(raw);
+    return Array.isArray(events) ? events : [];
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
   }
-
-  const payload = await request.json().catch(() => ({}));
-  const event = createLoginEvent(payload);
-  const users = await readUsers();
-  const nextUsers = upsertUserLogin(users, event);
-  await writeUsers(nextUsers);
-
-  return json({ ok: true, user: nextUsers.find(user => user.email === event.email) }, 201);
 }
 
 async function readUsers() {
-  const store = getStore(STORE_NAME);
-  const users = await store.get(USERS_KEY, { type: 'json' });
-
-  if (Array.isArray(users)) {
-    return normalizeUsers(users);
+  try {
+    const raw = await fs.readFile(USERS_FILE, 'utf8');
+    const users = JSON.parse(raw);
+    return Array.isArray(users) ? normalizeUsers(users) : [];
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
   }
 
   const legacyEvents = await readEvents();
@@ -76,14 +126,8 @@ async function readUsers() {
 }
 
 async function writeUsers(users) {
-  const store = getStore(STORE_NAME);
-  await store.setJSON(USERS_KEY, normalizeUsers(users));
-}
-
-async function readEvents() {
-  const store = getStore(STORE_NAME);
-  const events = await store.get(EVENTS_KEY, { type: 'json' });
-  return Array.isArray(events) ? events : [];
+  await fs.mkdir(DATA_DIR, { recursive: true });
+  await fs.writeFile(USERS_FILE, JSON.stringify(normalizeUsers(users), null, 2));
 }
 
 function createLoginEvent(payload) {
@@ -93,14 +137,14 @@ function createLoginEvent(payload) {
   }
 
   return {
-    id: safeString(payload.id) || crypto.randomUUID(),
+    id: payload.id || crypto.randomUUID(),
     email,
     provider: payload.provider === 'google' ? 'google' : 'google',
     authMethod: payload.authMethod === 'manual' ? 'manual' : 'oauth',
     uid: safeString(payload.uid),
     displayName: safeString(payload.displayName),
     photoUrl: safeString(payload.photoUrl),
-    signedInAt: safeString(payload.signedInAt) || new Date().toISOString(),
+    signedInAt: payload.signedInAt || new Date().toISOString(),
     receivedAt: new Date().toISOString(),
   };
 }
@@ -222,44 +266,40 @@ function dateValue(value) {
   return Number.isFinite(time) ? time : 0;
 }
 
-function isAdminAuthorized(request) {
-  const url = new URL(request.url);
-  const adminToken = process.env.HUSHH_ADMIN_TOKEN;
-  const headerToken = request.headers.get('x-admin-token');
-  const queryToken = url.searchParams.get('token');
-  return Boolean(adminToken && (headerToken === adminToken || queryToken === adminToken));
-}
-
-function isIngestAuthorized(request) {
-  const ingestToken = process.env.HUSHH_INGEST_TOKEN;
-  return Boolean(ingestToken && request.headers.get('x-hushh-api-key') === ingestToken);
-}
-
 function safeString(value) {
   if (value === undefined || value === null) return null;
   return String(value).slice(0, 500);
+}
+
+async function readJsonBody(req) {
+  const chunks = [];
+  let size = 0;
+
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > 1024 * 1024) {
+      throwHttpError(413, 'Body too large');
+    }
+    chunks.push(chunk);
+  }
+
+  if (!chunks.length) return {};
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+async function sendFile(res, filePath, contentType) {
+  const content = await fs.readFile(filePath);
+  res.writeHead(200, { 'content-type': contentType });
+  res.end(content);
+}
+
+function sendJson(res, statusCode, data) {
+  res.writeHead(statusCode, { 'content-type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(data));
 }
 
 function throwHttpError(statusCode, message) {
   const error = new Error(message);
   error.statusCode = statusCode;
   throw error;
-}
-
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      ...corsHeaders(),
-      'content-type': 'application/json; charset=utf-8',
-    },
-  });
-}
-
-function corsHeaders() {
-  return {
-    'access-control-allow-origin': '*',
-    'access-control-allow-methods': 'GET,POST,OPTIONS',
-    'access-control-allow-headers': 'content-type,x-admin-token,x-hushh-api-key',
-  };
 }

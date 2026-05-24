@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hushh Admin</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #080808;
+        --panel: #111111;
+        --panel-2: #171717;
+        --text: #f6f6f6;
+        --muted: rgba(255, 255, 255, 0.58);
+        --line: rgba(255, 255, 255, 0.11);
+        --accent: #8b5cf6;
+        --green: #22c55e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .shell {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 28px 20px 44px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 24px;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 28px;
+        line-height: 1.15;
+      }
+
+      .subtle {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .token {
+        width: min(340px, 100%);
+        min-height: 42px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0 12px;
+        background: var(--panel);
+        color: var(--text);
+        outline: none;
+      }
+
+      .token:focus {
+        border-color: rgba(139, 92, 246, 0.65);
+      }
+
+      .btn {
+        min-height: 42px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0 14px;
+        color: var(--text);
+        background: var(--panel-2);
+        cursor: pointer;
+      }
+
+      .btn.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: white;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+
+      .metric {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 16px;
+      }
+
+      .metric span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+
+      .metric strong {
+        display: block;
+        font-size: 24px;
+      }
+
+      .table-wrap {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: auto;
+        background: var(--panel);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 820px;
+      }
+
+      th,
+      td {
+        padding: 13px 14px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        font-size: 14px;
+        vertical-align: middle;
+      }
+
+      th {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        background: #101010;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .pill {
+        display: inline-flex;
+        min-height: 24px;
+        align-items: center;
+        border-radius: 999px;
+        padding: 0 9px;
+        background: rgba(139, 92, 246, 0.18);
+        color: #d8c7ff;
+        font-size: 12px;
+      }
+
+      .count-pill {
+        background: rgba(34, 197, 94, 0.14);
+        color: #9af0b9;
+      }
+
+      .email-trigger {
+        border: 0;
+        padding: 0;
+        background: transparent;
+        color: var(--text);
+        cursor: pointer;
+        text-align: left;
+        font-weight: 700;
+      }
+
+      .email-trigger:hover {
+        color: #d8c7ff;
+      }
+
+      .chevron {
+        display: inline-block;
+        width: 18px;
+        color: var(--muted);
+      }
+
+      .details-row td {
+        padding-top: 0;
+        background: #0c0c0c;
+      }
+
+      .details-panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #0a0a0a;
+        padding: 14px;
+      }
+
+      .details-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+
+      .detail-stat {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        background: var(--panel);
+      }
+
+      .detail-stat span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 6px;
+      }
+
+      .detail-stat strong {
+        display: block;
+        font-size: 15px;
+      }
+
+      .history-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .history-item {
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        gap: 10px;
+        align-items: center;
+        border-top: 1px solid var(--line);
+        padding-top: 8px;
+        color: rgba(255, 255, 255, 0.78);
+        font-size: 13px;
+      }
+
+      .status {
+        margin: 12px 0 0;
+        color: var(--muted);
+        min-height: 20px;
+        font-size: 13px;
+      }
+
+      .empty {
+        padding: 34px 16px;
+        color: var(--muted);
+        text-align: center;
+      }
+
+      @media (max-width: 760px) {
+        .topbar {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .toolbar {
+          justify-content: stretch;
+        }
+
+        .token,
+        .btn {
+          width: 100%;
+        }
+
+        .metrics {
+          grid-template-columns: 1fr;
+        }
+
+        .details-grid,
+        .history-item {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="topbar">
+        <div>
+          <h1>Hushh Login Admin</h1>
+          <div class="subtle">Google login emails collected from the mobile app.</div>
+        </div>
+        <div class="toolbar">
+          <input id="token" class="token" type="password" placeholder="Admin token" autocomplete="off" />
+          <button id="refresh" class="btn primary" type="button">Refresh</button>
+          <button id="export" class="btn" type="button">Export CSV</button>
+        </div>
+      </section>
+
+      <section class="metrics">
+        <div class="metric"><span>Total logins</span><strong id="total">0</strong></div>
+        <div class="metric"><span>Unique emails</span><strong id="unique">0</strong></div>
+        <div class="metric"><span>Latest login</span><strong id="latest">-</strong></div>
+      </section>
+
+      <section class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Name</th>
+              <th>Logins</th>
+              <th>Latest login</th>
+              <th>First login</th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            <tr><td class="empty" colspan="5">Enter the admin token and refresh.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <div id="status" class="status"></div>
+    </main>
+
+    <script>
+      const tokenInput = document.querySelector('#token');
+      const refreshButton = document.querySelector('#refresh');
+      const exportButton = document.querySelector('#export');
+      const rows = document.querySelector('#rows');
+      const status = document.querySelector('#status');
+      const total = document.querySelector('#total');
+      const unique = document.querySelector('#unique');
+      const latest = document.querySelector('#latest');
+
+      let users = [];
+      const expandedEmails = new Set();
+      tokenInput.value = localStorage.getItem('hushhAdminToken') || '';
+
+      refreshButton.addEventListener('click', loadEvents);
+      exportButton.addEventListener('click', exportCsv);
+      rows.addEventListener('click', event => {
+        const trigger = event.target.closest('[data-email-toggle]');
+        if (!trigger) return;
+
+        const email = trigger.dataset.email;
+        if (expandedEmails.has(email)) {
+          expandedEmails.delete(email);
+        } else {
+          expandedEmails.add(email);
+        }
+
+        render();
+      });
+      tokenInput.addEventListener('change', () => {
+        localStorage.setItem('hushhAdminToken', tokenInput.value.trim());
+      });
+
+      async function loadEvents() {
+        const token = tokenInput.value.trim();
+        localStorage.setItem('hushhAdminToken', token);
+        status.textContent = 'Loading...';
+
+        try {
+          const response = await fetch('/api/login-events', {
+            headers: {
+              'x-admin-token': token,
+            },
+          });
+
+          if (!response.ok) {
+            throw new Error(response.status === 401 ? 'Invalid admin token.' : 'Could not load login events.');
+          }
+
+          const data = await response.json();
+          users = Array.isArray(data.users) ? data.users : groupEvents(data.events || []);
+          render();
+          status.textContent = `Updated ${new Date().toLocaleString()}`;
+        } catch (error) {
+          status.textContent = error.message || 'Could not load login events.';
+        }
+      }
+
+      function render() {
+        const totalLogins = users.reduce((sum, user) => sum + getLoginCount(user), 0);
+        total.textContent = String(totalLogins);
+        unique.textContent = String(users.length);
+        latest.textContent = users[0]?.latestLoginAt ? formatShortDate(users[0].latestLoginAt) : '-';
+
+        if (!users.length) {
+          rows.innerHTML = '<tr><td class="empty" colspan="5">No login events yet.</td></tr>';
+          return;
+        }
+
+        rows.innerHTML = users
+          .map(user => renderUserRow(user))
+          .join('');
+      }
+
+      function renderUserRow(user) {
+        const email = user.email || '';
+        const expanded = expandedEmails.has(email);
+
+        return `
+          <tr>
+            <td>
+              <button class="email-trigger" type="button" data-email-toggle data-email="${escapeHtml(email)}">
+                <span class="chevron">${expanded ? 'v' : '&gt;'}</span>${escapeHtml(email)}
+              </button>
+            </td>
+            <td>${escapeHtml(user.displayName || '-')}</td>
+            <td><span class="pill count-pill">${escapeHtml(getLoginCount(user))}</span></td>
+            <td>${escapeHtml(formatDate(user.latestLoginAt))}</td>
+            <td>${escapeHtml(formatDate(user.firstLoginAt))}</td>
+          </tr>
+          ${expanded ? renderDetailsRow(user) : ''}
+        `;
+      }
+
+      function renderDetailsRow(user) {
+        const recentLogins = Array.isArray(user.recentLogins) ? user.recentLogins : [];
+        const history = recentLogins.length
+          ? recentLogins.map(login => `
+              <div class="history-item">
+                <span>Signed in: ${escapeHtml(formatDate(login.signedInAt))}</span>
+                <span>Received: ${escapeHtml(formatDate(login.receivedAt))}</span>
+                <span class="pill">${escapeHtml(login.authMethod || user.authMethod || 'oauth')}</span>
+              </div>
+            `).join('')
+          : '<div class="empty">No recent login history saved.</div>';
+
+        return `
+          <tr class="details-row">
+            <td colspan="5">
+              <div class="details-panel">
+                <div class="details-grid">
+                  <div class="detail-stat"><span>Total logins</span><strong>${escapeHtml(getLoginCount(user))}</strong></div>
+                  <div class="detail-stat"><span>Latest received</span><strong>${escapeHtml(formatDate(user.latestReceivedAt))}</strong></div>
+                  <div class="detail-stat"><span>Recent entries kept</span><strong>${escapeHtml(recentLogins.length)}</strong></div>
+                </div>
+                <div class="history-list">${history}</div>
+              </div>
+            </td>
+          </tr>
+        `;
+      }
+
+      function exportCsv() {
+        if (!users.length) {
+          status.textContent = 'No login users to export.';
+          return;
+        }
+
+        const header = ['email', 'displayName', 'loginCount', 'latestLoginAt', 'firstLoginAt', 'latestReceivedAt'];
+        const lines = [header.join(',')].concat(
+          users.map(user => header.map(key => csvCell(user[key] || '')).join(','))
+        );
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `hushh-login-users-${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+      }
+
+      function groupEvents(events) {
+        const grouped = new Map();
+
+        events.forEach(event => {
+          const email = String(event.email || '').trim().toLowerCase();
+          if (!email) return;
+
+          const existing = grouped.get(email) || {
+            email,
+            displayName: event.displayName || null,
+            authMethod: event.authMethod || 'oauth',
+            loginCount: 0,
+            firstLoginAt: null,
+            latestLoginAt: null,
+            latestReceivedAt: null,
+            recentLogins: [],
+          };
+
+          const signedInAt = event.signedInAt || event.receivedAt || new Date().toISOString();
+          existing.displayName = event.displayName || existing.displayName;
+          existing.authMethod = event.authMethod || existing.authMethod;
+          existing.loginCount += 1;
+          existing.firstLoginAt = earliestDate(existing.firstLoginAt, signedInAt);
+          existing.latestLoginAt = latestDate(existing.latestLoginAt, signedInAt);
+          existing.latestReceivedAt = latestDate(existing.latestReceivedAt, event.receivedAt);
+          existing.recentLogins = [{
+            authMethod: event.authMethod || 'oauth',
+            signedInAt,
+            receivedAt: event.receivedAt || signedInAt,
+          }, ...existing.recentLogins]
+            .sort((a, b) => dateValue(b.signedInAt) - dateValue(a.signedInAt))
+            .slice(0, 25);
+
+          grouped.set(email, existing);
+        });
+
+        return Array.from(grouped.values())
+          .sort((a, b) => dateValue(b.latestLoginAt) - dateValue(a.latestLoginAt));
+      }
+
+      function getLoginCount(user) {
+        return Number(user.loginCount) || (Array.isArray(user.recentLogins) ? user.recentLogins.length : 0);
+      }
+
+      function formatDate(value) {
+        if (!value) return '-';
+        const date = new Date(value);
+        return Number.isFinite(date.getTime()) ? date.toLocaleString() : '-';
+      }
+
+      function formatShortDate(value) {
+        const date = new Date(value);
+        return Number.isFinite(date.getTime()) ? date.toLocaleDateString() : '-';
+      }
+
+      function earliestDate(left, right) {
+        if (!left) return right || null;
+        if (!right) return left;
+        return dateValue(left) <= dateValue(right) ? left : right;
+      }
+
+      function latestDate(left, right) {
+        if (!left) return right || null;
+        if (!right) return left;
+        return dateValue(left) >= dateValue(right) ? left : right;
+      }
+
+      function dateValue(value) {
+        const time = Date.parse(value || '');
+        return Number.isFinite(time) ? time : 0;
+      }
+
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, char => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#039;',
+        })[char]);
+      }
+
+      function csvCell(value) {
+        return `"${String(value).replace(/"/g, '""')}"`;
+      }
+    </script>
+  </body>
+</html>
